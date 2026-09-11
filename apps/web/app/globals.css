@@ -164,8 +164,6 @@ h1 { max-width: 760px; margin-bottom: 26px; font-size: clamp(3rem, 7vw, 6.5rem);
 .report-page { background: #0b0f12; min-height: 100vh; }
 .report-shell { padding: 38px 0 72px; }
 .report-summary { display: flex; align-items: center; gap: 34px; padding: 4px 34px 34px; border-bottom: 1px solid #202831; }
-.score-ring { display: grid; place-items: center; flex: 0 0 124px; width: 124px; height: 124px; border-radius: 50%; background: conic-gradient(var(--amber) 0 223deg, #202832 223deg 360deg); }
-.score-ring-inner { display: grid; place-items: center; align-content: center; width: 106px; height: 106px; border-radius: 50%; background: #0b0f12; }
 .score-ring strong { color: var(--amber); font-size: 32px; line-height: 1; letter-spacing: -.06em; }
 .score-ring span { margin-top: 6px; color: #c1c8cb; font: 10px var(--font-plex-mono), monospace; letter-spacing: .04em; }
 .score-copy .mono-label { margin-bottom: 4px; color: #d7dee0; font-size: 11px; font-weight: 700; letter-spacing: .08em; }
@@ -183,6 +181,53 @@ h1 { max-width: 760px; margin-bottom: 26px; font-size: clamp(3rem, 7vw, 6.5rem);
 .severity-badge { display: inline-flex; align-items: center; gap: 5px; width: max-content; padding: 3px 7px; border: 1px solid currentColor; border-radius: 3px; font: 9px var(--font-plex-mono), monospace; font-weight: 700; letter-spacing: .05em; }.critical .severity-badge { color: #ff6068; background: #241519; }.warning .severity-badge { color: #f3ad15; background: #2a2416; }.info .severity-badge { color: #22b9ef; background: #13252d; }
 .finding-title { display: grid; gap: 2px; min-width: 0; }.finding-title .mono { overflow: hidden; color: #d4dadd; font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }.finding-title strong { color: #edf1f2; font-size: 13px; }.finding-chevron { color: #68747a; transition: transform 160ms ease; }.is-open .finding-chevron { transform: rotate(180deg); }
 .finding-details { display: grid; gap: 12px; padding: 0 14px 14px; }.finding-details > div { padding: 12px; border-radius: 6px; background: #080b0e; }.finding-details p { margin: 0; color: #d8dfe1; font-size: 12px; line-height: 1.6; }.detail-label { margin-bottom: 7px !important; color: #c5d0d2 !important; font: 10px var(--font-plex-mono), monospace !important; font-weight: 700; letter-spacing: .08em; }.fix-panel { border: 1px solid #16383b; background: #102327 !important; }
+
+/* Animated readiness score ring (SVG-based, replaces old conic-gradient version) */
+.score-ring {
+  position: relative;
+  flex: 0 0 124px;
+  width: 124px;
+  height: 124px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: #0b0f12;
+}
+
+.score-ring-svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  transform: rotate(-90deg);
+}
+
+.score-ring-track {
+  fill: none;
+  stroke: #202832;
+  stroke-width: 8;
+}
+
+.score-ring-progress {
+  fill: none;
+  stroke: var(--amber);
+  stroke-width: 8;
+  stroke-linecap: round;
+}
+
+.score-ring-inner {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  width: 106px;
+  height: 106px;
+  border-radius: 50%;
+  background: #0b0f12;
+}
+
 @media (max-width: 767px) {
   .shell { width: min(100% - 32px, 1120px); }
   .landing-hero { grid-template-columns: 1fr; gap: 48px; padding: 66px 0 70px; }

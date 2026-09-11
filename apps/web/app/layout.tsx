@@ -7,9 +7,8 @@ const interTight = Geist({ variable: '--font-inter-tight', subsets: ['latin'] })
 const plexMono = Geist_Mono({ variable: '--font-plex-mono', subsets: ['latin'] })
 
 export const metadata: Metadata = {
-  title: 'ClaimClear — Catch claim errors before submission',
+  title: 'ClaimClear',
   description: 'Audit clinical records and draft insurance claims against known rejection patterns before submission.',
-  generator: 'v0.app',
 }
 
 export const viewport: Viewport = {
