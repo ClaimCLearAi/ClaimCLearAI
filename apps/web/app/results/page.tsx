@@ -2,10 +2,9 @@
 
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
-import { AlertTriangle, ArrowDownToLine, ChevronDown, CircleAlert, Info, ShieldAlert } from 'lucide-react'
+import { AlertTriangle, ArrowDownToLine, ChevronDown, CircleAlert, Info, Loader2, ShieldAlert } from 'lucide-react'
 import { ThemeToggle } from '@/components/theme-toggle'
 import { SiteFooter } from '@/components/site-footer'
-import { DownloadReportButton } from '@/components/download-report-button' 
 
 type Finding = {
   severity: 'Critical' | 'Warning' | 'Info'
@@ -56,6 +55,7 @@ function easeOutCubic(t: number) {
 export default function ResultsPage() {
   const [openFinding, setOpenFinding] = useState(0) // Default to opening the first (critical) finding
   const [animatedScore, setAnimatedScore] = useState(0)
+  const [isDownloading, setIsDownloading] = useState(false)
 
   useEffect(() => {
     const duration = 1400 
@@ -80,6 +80,32 @@ export default function ResultsPage() {
 
   const dashOffset = RING_CIRCUMFERENCE - (animatedScore / 100) * RING_CIRCUMFERENCE
 
+  const handleDownload = async () => {
+    setIsDownloading(true)
+    try {
+      const res = await fetch('/api/report')
+      if (!res.ok) {
+        alert('Failed to generate report. Please try again.')
+        return
+      }
+      const blob = await res.blob()
+      const url = URL.createObjectURL(blob)
+
+      const link = document.createElement('a')
+      link.href = url
+      link.download = 'ClaimClear_Audit_Report.pdf'
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+      URL.revokeObjectURL(url)
+    } catch (err) {
+      console.error('Download failed:', err)
+      alert('Something went wrong generating the report.')
+    } finally {
+      setIsDownloading(false)
+    }
+  }
+
   return (
     <main className="report-page">
       <header className="site-header shell">
@@ -88,7 +114,14 @@ export default function ResultsPage() {
         </Link>
         <div className="header-actions">
           <ThemeToggle />
-          <DownloadReportButton /> 
+          <button className="button button-small" onClick={handleDownload} disabled={isDownloading}>
+            {isDownloading ? (
+              <Loader2 size={15} className="animate-spin" aria-hidden="true" />
+            ) : (
+              <ArrowDownToLine size={15} aria-hidden="true" />
+            )}
+            {isDownloading ? 'Generating…' : 'Download report'}
+          </button>
         </div>
       </header>
 
