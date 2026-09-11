@@ -53,7 +53,37 @@ See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for the full system design.
 ## Architecture
 
 ```
-[to be filled]
+                              ┌────────────────────────────────────────┐
+                              │            Client (Browser)            │
+                              └───────────────────┬────────────────────┘
+                                                  │ HTTPS
+                                                  ▼
+┌───────────────────────────────────────────────────────────────────────────────────┐
+│                              Next.js App — Vercel                                 │
+│                                                                                   │
+│  ┌────────────────────────┐              ┌─────────────────────────────────────┐  │
+│  │    Frontend (React)    │              │        API Routes (Node.js)         │  │
+│  │                        │              │                                     │  │
+│  │  /upload               │ ───────────> │  POST /api/claims/upload            │  │
+│  │  /results/[id]         │ <─────────── │  GET  /api/claims/[id]              │  │
+│  │                        │              │  POST /api/claims/[id]/extract      │  │
+│  │                        │              │  POST /api/claims/[id]/audit        │  │
+│  │                        │              │  GET  /api/claims/[id]/report       │  │
+│  └────────────────────────┘              └───────────────┬─────────────────┬───┘  │
+└──────────────────────────────────────────────────────────┼─────────────────┼──────┘
+                                                           │                 │
+                                       Store/fetch files & │                 │ HTTP
+                                       claim records       ▼                 ▼
+                                        ┌────────────────────┐    ┌─────────────────────────────┐
+                                        │      Supabase      │    │     Extraction Service      │
+                                        │                    │    │       (Python/FastAPI,      │
+                                        │  - PostgreSQL      │    │       Render/Railway)       │
+                                        │  - Storage (PDFs)  │    │                             │
+                                        │  - Auth (future)   │    │  1. Download PDFs           │
+                                        └────────────────────┘    │  2. PyMuPDF text extraction │
+                                                                  │  3. OCR fallback (scanned)  │
+                                                                  │  4. Gemini/Groq → JSON      │
+                                                                  └─────────────────────────────┘
 ```
 
 Full data flow, schema, and API contracts: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)
