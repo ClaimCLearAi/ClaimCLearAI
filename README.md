@@ -53,17 +53,7 @@ See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for the full system design.
 ## Architecture
 
 ```
-┌────────────────────────┐        ┌──────────────────────────┐
-│   Next.js App (Vercel)  │        │  Extraction Service        │
-│  Frontend + API Routes  │───────▶│  (Python/FastAPI)          │
-│                          │◀───────│  PyMuPDF → OCR → Gemini/   │
-└───────────┬──────────────┘        │  Groq → structured JSON    │
-            │                        └──────────────────────────┘
-            ▼
-   ┌──────────────────┐
-   │  Supabase          │
-   │  Postgres + Storage │
-   └──────────────────┘
+[to be filled]
 ```
 
 Full data flow, schema, and API contracts: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)
