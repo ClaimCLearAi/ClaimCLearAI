@@ -7,6 +7,8 @@ import { SiteFooter } from '@/components/site-footer'
 import { useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { startAudit } from '@/lib/audit-store'
+import { Logo } from '@/components/logo'
+
 
 type UploadKind = 'clinical' | 'claim'
 type SelectedFile = { file: File; name: string; size: number }
@@ -46,5 +48,5 @@ export default function UploadPage() {
     router.push('/processing')
   }
 
-  return <main><header className="site-header shell"><Link className="wordmark" href="/">ClaimClear</Link><div className="header-actions"><ThemeToggle /><span className="mono">Audit intake</span></div></header><section className="page-main shell"><div className="page-intro"><p className="mono-label">STEP 01 / DOCUMENTS</p><h1>Audit a claim</h1><p>Upload both documents to run your guided check.</p></div><div className="upload-grid"><UploadBox kind="clinical" label="Clinical record" file={files.clinical} error={errors.clinical} onFile={(file) => selectFile('clinical', file)} onRemove={() => setFiles((current) => ({ ...current, clinical: null }))} /><UploadBox kind="claim" label="Draft claim" file={files.claim} error={errors.claim} onFile={(file) => selectFile('claim', file)} onRemove={() => setFiles((current) => ({ ...current, claim: null }))} /></div><div className="upload-note"><LockKeyhole size={16} aria-hidden="true" /><span>Encrypted in transit · PDFs are used only to create this report</span></div>{submitError && <p className="error-text" role="alert">{submitError}</p>}<div className="actions"><button className="button" disabled={!ready} onClick={runAudit}>Run Audit <ArrowRight size={17} aria-hidden="true" /></button></div></section><SiteFooter /></main>
+  return <main><header className="site-header shell"><Logo /><div className="header-actions"><ThemeToggle /><span className="mono">Audit intake</span></div></header><section className="page-main shell"><div className="page-intro"><p className="mono-label">STEP 01 / DOCUMENTS</p><h1>Audit a claim</h1><p>Upload both documents to run your guided check.</p></div><div className="upload-grid"><UploadBox kind="clinical" label="Clinical record" file={files.clinical} error={errors.clinical} onFile={(file) => selectFile('clinical', file)} onRemove={() => setFiles((current) => ({ ...current, clinical: null }))} /><UploadBox kind="claim" label="Draft claim" file={files.claim} error={errors.claim} onFile={(file) => selectFile('claim', file)} onRemove={() => setFiles((current) => ({ ...current, claim: null }))} /></div><div className="upload-note"><LockKeyhole size={16} aria-hidden="true" /><span>Encrypted in transit · PDFs are used only to create this report</span></div>{submitError && <p className="error-text" role="alert">{submitError}</p>}<div className="actions"><button className="button" disabled={!ready} onClick={runAudit}>Run Audit <ArrowRight size={17} aria-hidden="true" /></button></div></section><SiteFooter /></main>
 }

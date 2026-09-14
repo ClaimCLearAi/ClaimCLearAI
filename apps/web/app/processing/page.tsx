@@ -7,6 +7,8 @@ import { SiteFooter } from '@/components/site-footer'
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { getState, subscribe } from '@/lib/audit-store'
+import { Logo } from '@/components/logo'
+
 
 // Purely cosmetic step labels — they no longer drive completion, the
 // real backend response does. They just advance on a timer while we wait,
@@ -51,7 +53,7 @@ export default function ProcessingPage() {
   return (
     <main>
       <header className="site-header shell">
-        <Link className="wordmark" href="/">ClaimClear</Link>
+        <Logo />
         <div className="header-actions"><ThemeToggle /><span className="mono">Processing</span></div>
       </header>
       <section className="center-page">

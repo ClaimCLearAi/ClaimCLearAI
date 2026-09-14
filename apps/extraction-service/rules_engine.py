@@ -104,7 +104,10 @@ def check_rule_03_diagnosis_match(clinical: Dict[str, Any], claim: Dict[str, Any
     if not claim_icd:
         return True, "Primary ICD-10 diagnosis code is completely missing from Claim Form Part B."
 
-    if clinical_icd and (clinical_icd != claim_icd):
+    if not clinical_icd:
+        return True, "Cannot verify diagnosis: Discharge Summary is missing a primary ICD-10 code to cross-check against the claim."
+
+    if clinical_icd != claim_icd:
         return True, f"Diagnosis mismatch: Claim states ICD '{claim_icd}', but Discharge Summary specifies '{clinical_icd}'."
 
     return False, ""
@@ -120,6 +123,12 @@ def check_rule_04_min_24hr_stay(clinical: Dict[str, Any], claim: Dict[str, Any])
         dis = parse_iso_datetime(claim_patient.get("date_of_discharge"), claim_patient.get("time_of_discharge"))
 
         duration_hours = (dis - adm).total_seconds() / 3600.0
+
+        # If duration is negative, the dates are inverted -- that's a data integrity
+        # problem already caught and reported by RULE_02_DATE_CHRONOLOGY. Don't stack
+        # a second, nonsensical "-X hours" finding for the same root cause.
+        if duration_hours < 0:
+            return False, ""
 
         if duration_hours < 24.0 and "day" not in admission_type:
             return True, f"Inpatient stay was {duration_hours:.1f} hours (< 24 hours) but not marked as Day Care."
@@ -161,6 +170,23 @@ def check_rule_08_hospital_id(clinical: Dict[str, Any], claim: Dict[str, Any]) -
     return False, ""
 
 
+def check_rule_18_bank_details(clinical: Dict[str, Any], claim: Dict[str, Any]) -> Tuple[bool, str]:
+    """RULE_18: Ensures insured's bank account number and IFSC code are present for NEFT settlement."""
+    bank_details = claim.get("section_f_bank_details", {}) or {}
+    account_no = bank_details.get("account_number")
+    ifsc_code = bank_details.get("ifsc_code")
+
+    missing = []
+    if not account_no or not str(account_no).strip():
+        missing.append("account number")
+    if not ifsc_code or not str(ifsc_code).strip():
+        missing.append("IFSC code")
+
+    if missing:
+        return True, f"Insured's bank {' and '.join(missing)} missing from Claim Form Part A Section F -- required for NEFT settlement."
+    return False, ""
+
+
 def check_rule_16_arithmetic(clinical: Dict[str, Any], claim: Dict[str, Any]) -> Tuple[bool, str]:
     """RULE_16: Verifies itemized line items sum up to total_claimed_amount."""
     finances = claim.get("section_e_financial_summary", {}) or {}
@@ -195,6 +221,7 @@ RULE_REGISTRY = [
     ("RULE_07_DOCTOR_REG_MISSING", check_rule_07_doctor_reg),
     ("RULE_08_HOSPITAL_ID_MISSING", check_rule_08_hospital_id),
     ("RULE_16_ARITHMETIC_TOTAL_MISMATCH", check_rule_16_arithmetic),
+    ("RULE_18_BANK_DETAILS_MISSING", check_rule_18_bank_details),
 ]
 
 
