@@ -6,3 +6,5 @@ pytesseract
 pillow
 httpx
 python-multipart
+python-dotenv
+google-genai
