@@ -266,3 +266,18 @@ h1 { max-width: 760px; margin-bottom: 26px; font-size: clamp(3rem, 7vw, 6.5rem);
   .upload-grid { gap: 16px; }
   .dropzone { min-height: 220px; }
 }
+
+.dropzone { min-width: 0; }
+.file-row { min-width: 0; }
+.file-name {
+  min-width: 0;
+  flex: 1 1 auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.file-name small {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+.remove-file { flex: 0 0 auto; }
