@@ -1,6 +1,6 @@
 import json
 from datetime import datetime
-from typing import Any, Dict, List, Tuple
+from typing import Any, Dict, List, Tuple, Optional
 
 # -------------------------------------------------------------------------
 # SECTION 1: HELPER FUNCTIONS (Data Cleaning & Parsing)
@@ -10,24 +10,22 @@ def normalize_text(value: Any) -> str:
     """Removes extra spaces, punctuation, and converts text to lowercase."""
     if not value:
         return ""
-    # Keep only alphanumeric characters and spaces
-    text=str(value)
-    text=text.lower()
-    cleaned=""
-    for char in text:
-        if char.isalnum() or char.isspace():
-            cleaned=cleaned+char
-    cleaned=cleaned.split()
-    cleaned=" ".join(cleaned)
+    text = str(value).lower()
+    cleaned = "".join(char for char in text if char.isalnum() or char.isspace())
+    return " ".join(cleaned.split())
 
 
-def parse_iso_datetime(date_str: str, time_str: str = "00:00") -> datetime:
-    """Converts separate date and time strings into a single comparable Python datetime object."""
-    clean_date = date_str.strip()
-    if time_str and time_str.strip():
-        clean_time=time_str.strip()
+def parse_iso_datetime(date_str: Optional[str], time_str: Optional[str] = "00:00") -> datetime:
+    """Converts separate date and time strings into a single comparable Python datetime object.
+    Raises ValueError if date_str is missing/None -- callers should catch this."""
+    if not date_str or not str(date_str).strip():
+        raise ValueError("date_str is missing or empty")
+
+    clean_date = str(date_str).strip()
+    if time_str and str(time_str).strip():
+        clean_time = str(time_str).strip()
     else:
-        clean_time="00:00"
+        clean_time = "00:00"
     return datetime.strptime(f"{clean_date} {clean_time}", "%Y-%m-%d %H:%M")
 
 
@@ -38,31 +36,30 @@ def parse_iso_datetime(date_str: str, time_str: str = "00:00") -> datetime:
 
 def check_rule_01_preauth(clinical: Dict[str, Any], claim: Dict[str, Any]) -> Tuple[bool, str]:
     """RULE_01: Verifies that surgical claims have an approved Pre-Authorization ID."""
-    treatment_section = claim.get("section_c_ailment_and_treatment", {})
-    procedure_code = treatment_section.get("procedure_icd10_pcs", "")
+    treatment_section = claim.get("section_c_ailment_and_treatment", {}) or {}
+    procedure_code = treatment_section.get("procedure_icd10_pcs")
     pre_auth_id = treatment_section.get("pre_auth_id")
 
     # If a procedure code exists, pre-authorization is mandatory
     if procedure_code and (not pre_auth_id or not str(pre_auth_id).strip()):
         return True, "Surgical procedure is billed, but the Pre-Authorization Reference ID is missing or empty."
-    else :
-        return False, ""
+    return False, ""
 
 
 def check_rule_02_chronology(clinical: Dict[str, Any], claim: Dict[str, Any]) -> Tuple[bool, str]:
     """RULE_02: Checks if discharge occurs before admission or conflicts with clinical records."""
-    claim_patient = claim.get("section_b_patient_details", {})
-    clinical_stay = clinical.get("hospitalization_timeline", {})
+    claim_patient = claim.get("section_b_patient_details", {}) or {}
+    clinical_stay = clinical.get("hospitalization_timeline", {}) or {}
 
     try:
         # Parse claim dates
         claim_adm = parse_iso_datetime(
-            claim_patient["date_of_admission"], 
-            claim_patient.get("time_of_admission", "00:00")
+            claim_patient.get("date_of_admission"),
+            claim_patient.get("time_of_admission")
         )
         claim_dis = parse_iso_datetime(
-            claim_patient["date_of_discharge"], 
-            claim_patient.get("time_of_discharge", "00:00")
+            claim_patient.get("date_of_discharge"),
+            claim_patient.get("time_of_discharge")
         )
 
         # Logical Check 1: Did the patient leave before they arrived?
@@ -71,12 +68,12 @@ def check_rule_02_chronology(clinical: Dict[str, Any], claim: Dict[str, Any]) ->
 
         # Logical Check 2: Do claim dates conflict with the actual clinical notes?
         clin_adm = parse_iso_datetime(
-            clinical_stay["admission_date"], 
-            clinical_stay.get("admission_time", "00:00")
+            clinical_stay.get("admission_date"),
+            clinical_stay.get("admission_time")
         )
         clin_dis = parse_iso_datetime(
-            clinical_stay["discharge_date"], 
-            clinical_stay.get("discharge_time", "00:00")
+            clinical_stay.get("discharge_date"),
+            clinical_stay.get("discharge_time")
         )
 
         if claim_adm.date() != clin_adm.date() or claim_dis.date() != clin_dis.date():
@@ -85,7 +82,7 @@ def check_rule_02_chronology(clinical: Dict[str, Any], claim: Dict[str, Any]) ->
                 f"do not match Discharge Summary ({clin_adm.date()} to {clin_dis.date()})."
             )
 
-    except (KeyError, ValueError) as err:
+    except (KeyError, ValueError, TypeError, AttributeError) as err:
         return True, f"Failed to validate dates due to missing or invalid format: {str(err)}"
 
     return False, ""
@@ -93,12 +90,15 @@ def check_rule_02_chronology(clinical: Dict[str, Any], claim: Dict[str, Any]) ->
 
 def check_rule_03_diagnosis_match(clinical: Dict[str, Any], claim: Dict[str, Any]) -> Tuple[bool, str]:
     """RULE_03: Checks if primary ICD-10 code matches between clinical notes and claim form."""
-    clinical_icd = clinical.get("clinical_assessment", {}).get("primary_icd10_code", "").strip().upper()
-    claim_icd = claim.get("section_c_ailment_and_treatment", {}).get("primary_diagnosis_icd10", "").strip().upper()
+    clinical_icd = (clinical.get("clinical_assessment", {}) or {}).get("primary_icd10_code")
+    claim_icd = (claim.get("section_c_ailment_and_treatment", {}) or {}).get("primary_diagnosis_icd10")
+
+    clinical_icd = (clinical_icd or "").strip().upper()
+    claim_icd = (claim_icd or "").strip().upper()
 
     if not claim_icd:
         return True, "Primary ICD-10 diagnosis code is completely missing from Claim Form Part B."
-    
+
     if clinical_icd and (clinical_icd != claim_icd):
         return True, f"Diagnosis mismatch: Claim states ICD '{claim_icd}', but Discharge Summary specifies '{clinical_icd}'."
 
@@ -107,35 +107,34 @@ def check_rule_03_diagnosis_match(clinical: Dict[str, Any], claim: Dict[str, Any
 
 def check_rule_04_min_24hr_stay(clinical: Dict[str, Any], claim: Dict[str, Any]) -> Tuple[bool, str]:
     """RULE_04: Flags inpatient admissions under 24 hours not marked as Day Care."""
-    claim_patient = claim.get("section_b_patient_details", {})
-    admission_type = str(claim_patient.get("type_of_admission", "")).lower()
+    claim_patient = claim.get("section_b_patient_details", {}) or {}
+    admission_type = normalize_text(claim_patient.get("type_of_admission"))
 
     try:
-        adm = parse_iso_datetime(claim_patient["date_of_admission"], claim_patient.get("time_of_admission", "00:00"))
-        dis = parse_iso_datetime(claim_patient["date_of_discharge"], claim_patient.get("time_of_discharge", "00:00"))
-        
-        # Calculate duration in hours
+        adm = parse_iso_datetime(claim_patient.get("date_of_admission"), claim_patient.get("time_of_admission"))
+        dis = parse_iso_datetime(claim_patient.get("date_of_discharge"), claim_patient.get("time_of_discharge"))
+
         duration_hours = (dis - adm).total_seconds() / 3600.0
 
         if duration_hours < 24.0 and "day" not in admission_type:
             return True, f"Inpatient stay was {duration_hours:.1f} hours (< 24 hours) but not marked as Day Care."
     except Exception:
         pass  # Date formatting errors will be caught by RULE_02
-        
+
     return False, ""
 
 
 def check_rule_05_name_mismatch(clinical: Dict[str, Any], claim: Dict[str, Any]) -> Tuple[bool, str]:
     """RULE_05: Checks if patient name differs across documents."""
-    clin_name = normalize_text(clinical.get("patient_demographics", {}).get("patient_name"))
-    claim_name = normalize_text(claim.get("section_b_patient_details", {}).get("patient_name"))
+    clin_name = normalize_text((clinical.get("patient_demographics", {}) or {}).get("patient_name"))
+    claim_name = normalize_text((claim.get("section_b_patient_details", {}) or {}).get("patient_name"))
 
     if not claim_name:
         return True, "Patient name is missing on Claim Form Part B."
 
     if clin_name != claim_name:
-        original_clin = clinical.get("patient_demographics", {}).get("patient_name")
-        original_claim = claim.get("section_b_patient_details", {}).get("patient_name")
+        original_clin = (clinical.get("patient_demographics", {}) or {}).get("patient_name")
+        original_claim = (claim.get("section_b_patient_details", {}) or {}).get("patient_name")
         return True, f"Name mismatch: Clinical notes say '{original_clin}', but Claim Form says '{original_claim}'."
 
     return False, ""
@@ -143,7 +142,7 @@ def check_rule_05_name_mismatch(clinical: Dict[str, Any], claim: Dict[str, Any])
 
 def check_rule_07_doctor_reg(clinical: Dict[str, Any], claim: Dict[str, Any]) -> Tuple[bool, str]:
     """RULE_07: Ensures treating doctor registration number is present."""
-    doc_reg = claim.get("section_a_hospital_details", {}).get("doctor_registration_no", "")
+    doc_reg = (claim.get("section_a_hospital_details", {}) or {}).get("doctor_registration_no")
     if not doc_reg or not str(doc_reg).strip():
         return True, "Treating doctor's State Medical Council / NMC registration number is missing."
     return False, ""
@@ -151,7 +150,7 @@ def check_rule_07_doctor_reg(clinical: Dict[str, Any], claim: Dict[str, Any]) ->
 
 def check_rule_08_hospital_id(clinical: Dict[str, Any], claim: Dict[str, Any]) -> Tuple[bool, str]:
     """RULE_08: Ensures Hospital ROHINI identification number is present."""
-    rohini = claim.get("section_a_hospital_details", {}).get("hospital_id_rohini", "")
+    rohini = (claim.get("section_a_hospital_details", {}) or {}).get("hospital_id_rohini")
     if not rohini or not str(rohini).strip():
         return True, "Hospital ROHINI ID (IIB registry) is missing in Section A."
     return False, ""
@@ -159,20 +158,19 @@ def check_rule_08_hospital_id(clinical: Dict[str, Any], claim: Dict[str, Any]) -
 
 def check_rule_16_arithmetic(clinical: Dict[str, Any], claim: Dict[str, Any]) -> Tuple[bool, str]:
     """RULE_16: Verifies itemized line items sum up to total_claimed_amount."""
-    finances = claim.get("section_e_financial_summary", {})
-    claimed_total = float(finances.get("total_claimed_amount", 0.0))
+    finances = claim.get("section_e_financial_summary", {}) or {}
+    claimed_total = float(finances.get("total_claimed_amount") or 0.0)
 
     line_items = [
-        float(finances.get("room_nursing_charges", 0.0)),
-        float(finances.get("icu_charges", 0.0)),
-        float(finances.get("ot_charges", 0.0)),
-        float(finances.get("surgeon_consultation_fees", 0.0)),
-        float(finances.get("investigation_charges", 0.0)),
-        float(finances.get("medicines_consumables", 0.0)),
+        float(finances.get("room_nursing_charges") or 0.0),
+        float(finances.get("icu_charges") or 0.0),
+        float(finances.get("ot_charges") or 0.0),
+        float(finances.get("surgeon_consultation_fees") or 0.0),
+        float(finances.get("investigation_charges") or 0.0),
+        float(finances.get("medicines_consumables") or 0.0),
     ]
     computed_sum = sum(line_items)
 
-    # Allow a 1.0 Rupee margin for rounding differences
     if abs(computed_sum - claimed_total) > 1.0:
         return True, f"Sum of line items (₹{computed_sum:,.2f}) does not match Total Claimed Amount (₹{claimed_total:,.2f})."
 
@@ -200,8 +198,8 @@ RULE_REGISTRY = [
 # -------------------------------------------------------------------------
 
 def run_claim_audit(
-    clinical_data: Dict[str, Any], 
-    claim_data: Dict[str, Any], 
+    clinical_data: Dict[str, Any],
+    claim_data: Dict[str, Any],
     rules_config: Dict[str, Any]
 ) -> Dict[str, Any]:
     """Runs all checks, deducts points, and prepares the output payload."""
@@ -209,11 +207,9 @@ def run_claim_audit(
     findings: List[Dict[str, Any]] = []
 
     for rule_id, check_function in RULE_REGISTRY:
-        # Run the check
         failed, issue_message = check_function(clinical_data, claim_data)
 
         if failed:
-            # Pull metadata from rules_config.json
             meta = rules_config.get(rule_id, {})
             deduction = meta.get("deduction", 0)
             score -= deduction
@@ -229,10 +225,8 @@ def run_claim_audit(
                 "suggested_fix": meta.get("suggested_fix", "")
             })
 
-    # Ensure score doesn't drop below 0
     final_score = max(0, score)
 
-    # Determine status
     if final_score >= 85:
         status = "READY_TO_SUBMIT"
     elif final_score >= 60:
@@ -253,7 +247,6 @@ def run_claim_audit(
 # -------------------------------------------------------------------------
 
 if __name__ == "__main__":
-    # Load JSON files directly for manual testing
     with open("rules_config.json", "r") as f:
         rules_db = json.load(f)
 
@@ -263,10 +256,8 @@ if __name__ == "__main__":
     with open("claim_part_b.json", "r") as f:
         claim_mock = json.load(f)
 
-    # Run the audit
     audit_report = run_claim_audit(clinical_mock, claim_mock, rules_db)
 
-    # Print a formatted summary to terminal
     print("\n" + "=" * 60)
     print(f" CLAIM AUDIT REPORT | Score: {audit_report['readiness_score']}/100 [{audit_report['status']}]")
     print(f" Total Violations Found: {audit_report['total_violations']}")

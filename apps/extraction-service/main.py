@@ -1,3 +1,6 @@
+from pathlib import Path
+import json
+
 from dotenv import load_dotenv
 from fastapi import FastAPI, UploadFile, File, HTTPException
 from pydantic import BaseModel
@@ -5,14 +8,22 @@ from pydantic import BaseModel
 from pdf_parser import extract_text, is_text_sufficient
 from ocr import extract_text_ocr
 import llm_extract
+import rules_engine
 
 app = FastAPI(title="ClaimClear Extraction Service")
-load_dotenv()  
+
+env_path = Path(__file__).resolve().parent / ".env"
+load_dotenv(env_path)
+
+# Load rules config once at startup, not on every request
+RULES_CONFIG_PATH = Path(__file__).resolve().parent / "rules_config.json"
+with open(RULES_CONFIG_PATH, "r", encoding="utf-8") as f:
+    RULES_CONFIG = json.load(f)
 
 
 class DocumentExtractionResult(BaseModel):
     text: str
-    method: str      
+    method: str
     char_count: int
 
 
@@ -41,6 +52,9 @@ async def extract_text_endpoint(
     clinical_doc: UploadFile = File(...),
     draft_claim: UploadFile = File(...),
 ):
+    """NOTE: this endpoint ONLY does PDF/OCR text extraction.
+    It never calls Gemini and never runs the rules audit.
+    Use /extract for the full pipeline."""
     clinical_bytes = await clinical_doc.read()
     claim_bytes = await draft_claim.read()
 
@@ -55,6 +69,7 @@ async def extract_endpoint(
     clinical_doc: UploadFile = File(...),
     draft_claim: UploadFile = File(...),
 ):
+    """Full pipeline: PDF/OCR extraction -> Gemini structuring -> rules audit."""
     clinical_bytes = await clinical_doc.read()
     claim_bytes = await draft_claim.read()
 
@@ -69,10 +84,21 @@ async def extract_endpoint(
             detail=f"LLM extraction failed: {e}. Check Gemini api key in .env",
         )
 
+    discharge_summary = structured["discharge_summary"]
+    claim_part_b = structured["claim_part_b"]
+
+    try:
+        audit_report = rules_engine.run_claim_audit(discharge_summary, claim_part_b, RULES_CONFIG)
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Rules audit failed: {e}",
+        )
+
     return {
         "extraction_debug": {
             "clinical_doc_method": clinical_result.method,
             "draft_claim_method": claim_result.method,
         },
-        **structured,
+        "audit": audit_report,
     }

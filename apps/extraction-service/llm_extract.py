@@ -12,9 +12,6 @@ load_dotenv(env_path)
 
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 
-OUTPUT_DIR = Path(__file__).resolve().parent / "output"
-OUTPUT_DIR.mkdir(exist_ok=True)
-
 
 # ---------------- Discharge Summary schema ----------------
 
@@ -140,9 +137,6 @@ class ExtractionOutput(BaseModel):
     claim_part_b: ClaimPartB
 
 
-DISCHARGE_SCHEMA_JSON = json.dumps(DischargeSummary.model_json_schema(), indent=2)
-CLAIM_SCHEMA_JSON = json.dumps(ClaimPartB.model_json_schema(), indent=2)
-
 PROMPT_TEMPLATE = """You are a medical claims data extraction system. You will be given raw text
 extracted from two documents: a clinical document (discharge summary) and a draft insurance claim
 (claim form part B).
@@ -240,37 +234,20 @@ def run(clinical_text: str, claim_text: str) -> dict:
 
     try:
         response = client.models.generate_content(
-        model="gemini-3.6-flash",
-        contents=prompt,
-        config=types.GenerateContentConfig(
-            response_mime_type="application/json",
-            response_schema=ExtractionOutput,
-            temperature=0.0,
-        ),
-    )
+            model="gemini-3.6-flash",
+            contents=prompt,
+            config=types.GenerateContentConfig(
+                response_mime_type="application/json",
+                response_schema=ExtractionOutput,
+                temperature=0.0,
+            ),
+        )
     except Exception as e:
         raise RuntimeError(f"Gemini API call failed: {e}") from e
 
     result = json.loads(response.text)
 
-    discharge_summary = result["discharge_summary"]
-    claim_part_b = result["claim_part_b"]
-
-    # Write out as two separate JSON files
-    discharge_path = OUTPUT_DIR / "discharge_summary.json"
-    claim_path = OUTPUT_DIR / "claim_part_b.json"
-
-    with open(discharge_path, "w", encoding="utf-8") as f:
-        json.dump(discharge_summary, f, indent=2)
-
-    with open(claim_path, "w", encoding="utf-8") as f:
-        json.dump(claim_part_b, f, indent=2)
-
     return {
-        "discharge_summary": discharge_summary,
-        "claim_part_b": claim_part_b,
-        "output_files": {
-            "discharge_summary": str(discharge_path),
-            "claim_part_b": str(claim_path),
-        },
+        "discharge_summary": result["discharge_summary"],
+        "claim_part_b": result["claim_part_b"],
     }
