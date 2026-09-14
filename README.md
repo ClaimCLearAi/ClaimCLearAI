@@ -4,7 +4,7 @@
 
 Built at byteBuilt 1.0 (byteXL × Chandigarh University) by Team Syntax Terror.
 
-[Live Demo](#) · [Report Bug](../../issues) · [Request Feature](../../issues)
+ · [Report Bug](../../issues) · [Request Feature](../../issues)
 
 ---
 
@@ -48,7 +48,6 @@ Clinical Docs + Draft Claim  →  AI Extraction  →  Rules Engine  →  Readine
 | Storage | Supabase Storage |
 | Deployment | Vercel (web), Render/Railway (extraction service) |
 
-See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for the full system design.
 
 ## Architecture
 
@@ -86,7 +85,6 @@ See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for the full system design.
                                                                   └─────────────────────────────┘
 ```
 
-Full data flow, schema, and API contracts: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)
 
 ## Getting Started
 
@@ -112,18 +110,18 @@ pip install -r requirements.txt
 
 ### 2. Configure environment
 ```bash
-cp .env.example .env.local   # in apps/web
-cp .env.example .env         # in apps/extraction-service
+cp .env.example    # in apps/web
+cp .env.example     # in apps/extraction-service
 ```
 Fill in:
 ```
-[to be filled]
+GEMINI_API_KEY=
+GROQ_API_KEY=
+DISCORD_WEBHOOK_URL=
 ```
 
-### 3. Set up the database
-Run the schema in `docs/schema.sql` against your Supabase project (SQL Editor → paste → run).
 
-### 4. Run locally
+### 3. Run locally
 ```bash
 # Terminal 1 — extraction service
 cd apps/extraction-service
