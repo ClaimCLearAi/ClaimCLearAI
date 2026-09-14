@@ -17,10 +17,20 @@ export type AuditFinding = {
   suggested_fix: string
 }
 
+export type PatientDetails = {
+  name?: string
+  member_id?: string
+  dob?: string
+  date_of_service?: string
+  principal_diagnosis?: string
+  discharge_status?: string
+}
+
 export type AuditResult = {
   readiness_score: number
   status: string
   total_violations: number
+  patient_details?: PatientDetails 
   findings: AuditFinding[]
 }
 
