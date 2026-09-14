@@ -1,5 +1,6 @@
 import json
 import os
+import time
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -7,10 +8,22 @@ from pydantic import BaseModel
 from google import genai
 from google.genai import types
 
+from groq import Groq  # pip install groq
+
 env_path = Path(__file__).resolve().parent / ".env"
 load_dotenv(env_path)
 
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+GROQ_API_KEY = os.getenv("GROQ_API_KEY")  # get a free key at https://console.groq.com/keys
+
+# Fallback model config
+GROQ_MODEL = "openai/gpt-oss-120b"  # llama-3.3-70b-versatile was deprecated by Groq in June 2026
+GEMINI_MAX_RETRIES = 2                  # retries before falling back
+GEMINI_RETRY_DELAY_SECONDS = 2          # backoff between retries
+GROQ_MAX_RETRIES = 2                    # retries before falling back to Ollama
+GROQ_RETRY_DELAY_SECONDS = 2
+
+groq_client = Groq(api_key=GROQ_API_KEY) if GROQ_API_KEY else None
 
 
 # ---------------- Discharge Summary schema ----------------
@@ -213,7 +226,8 @@ these two structures precisely (field names, nesting, and types must match exact
 Rules:
 - If a field cannot be found, use null (or false/0 for booleans/numbers where structurally required) -- do not guess or fabricate values.
 - Dates must be YYYY-MM-DD, times HH:MM (24-hour).
-- Return both objects nested under top-level keys "discharge_summary" and "claim_part_b".
+- Return ONLY valid JSON with both objects nested under top-level keys "discharge_summary" and "claim_part_b".
+- Do not include any explanation, markdown formatting, or code fences -- raw JSON only.
 
 CLINICAL DOCUMENT TEXT (discharge summary source):
 \"\"\"
@@ -229,25 +243,99 @@ DRAFT CLAIM TEXT (claim part B source):
 client = genai.Client(api_key=GEMINI_API_KEY)
 
 
+def _call_gemini(prompt: str) -> dict:
+    response = client.models.generate_content(
+        model="gemini-3.6-flash",
+        contents=prompt,
+        config=types.GenerateContentConfig(
+            response_mime_type="application/json",
+            response_schema=ExtractionOutput,
+            temperature=0.0,
+        ),
+    )
+    return json.loads(response.text)
+
+
+def _strip_code_fences(text: str) -> str:
+    text = text.strip()
+    if text.startswith("```"):
+        # remove ```json ... ``` or ``` ... ```
+        text = text.split("```", 2)[1] if text.count("```") >= 2 else text
+        if text.lstrip().startswith("json"):
+            text = text.lstrip()[4:]
+    return text.strip().strip("`").strip()
+
+
+def _call_groq(prompt: str) -> dict:
+    if groq_client is None:
+        raise RuntimeError("GROQ_API_KEY not set in .env")
+
+    response = groq_client.chat.completions.create(
+        model="llama-3.3-70b-versatileL",
+        messages=[{"role": "user", "content": prompt}],
+        temperature=0.0,
+        response_format={"type": "json_object"},
+    )
+    raw = response.choices[0].message.content
+    raw = _strip_code_fences(raw)
+    return json.loads(raw)
+
+
 def run(clinical_text: str, claim_text: str) -> dict:
     prompt = PROMPT_TEMPLATE.format(clinical_text=clinical_text, claim_text=claim_text)
 
-    try:
-        response = client.models.generate_content(
-            model="gemini-3.6-flash",
-            contents=prompt,
-            config=types.GenerateContentConfig(
-                response_mime_type="application/json",
-                response_schema=ExtractionOutput,
-                temperature=0.0,
-            ),
-        )
-    except Exception as e:
-        raise RuntimeError(f"Gemini API call failed: {e}") from e
+    result = None
+    gemini_error = None
+    groq_error = None
 
-    result = json.loads(response.text)
+    # --- Tier 1: Gemini ---
+    for attempt in range(1, GEMINI_MAX_RETRIES + 1):
+        try:
+            result = _call_gemini(prompt)
+            break
+        except Exception as e:
+            gemini_error = e
+            print(f"[Gemini] attempt {attempt}/{GEMINI_MAX_RETRIES} failed: {e}")
+            if attempt < GEMINI_MAX_RETRIES:
+                time.sleep(GEMINI_RETRY_DELAY_SECONDS * attempt)
+
+    # --- Tier 2: Groq ---
+    if result is None:
+        print(f"[Gemini] exhausted retries ({gemini_error}). Trying Groq '{GROQ_MODEL}'...")
+        for attempt in range(1, GROQ_MAX_RETRIES + 1):
+            try:
+                result = _call_groq(prompt)
+                break
+            except Exception as e:
+                groq_error = e
+                print(f"[Groq] attempt {attempt}/{GROQ_MAX_RETRIES} failed: {e}")
+                if attempt < GROQ_MAX_RETRIES:
+                    time.sleep(GROQ_RETRY_DELAY_SECONDS * attempt)
+
+    # --- Both providers failed ---
+    if result is None:
+        raise RuntimeError(
+            f"All providers failed.\n"
+            f"Gemini error: {gemini_error}\n"
+            f"Groq error: {groq_error}"
+        )
+
+    # --- Validate against schema regardless of source ---
+    try:
+        validated = ExtractionOutput(**result)
+        result = validated.model_dump()
+    except Exception as e:
+        raise RuntimeError(f"Extraction output failed schema validation: {e}") from e
 
     return {
         "discharge_summary": result["discharge_summary"],
         "claim_part_b": result["claim_part_b"],
     }
+
+
+if __name__ == "__main__":
+    # quick manual test
+    sample_clinical = "Patient Name: John Doe. Admitted 2026-01-01, discharged 2026-01-05..."
+    sample_claim = "Hospital: ABC Hospital. IP Reg No: 12345..."
+    out = run(sample_clinical, sample_claim)
+    print(json.dumps(out, indent=2))

@@ -7,6 +7,8 @@ import { ArrowDownToLine, ChevronDown, CircleAlert, Info, Loader2, ShieldAlert }
 import { ThemeToggle } from '@/components/theme-toggle'
 import { SiteFooter } from '@/components/site-footer'
 import { getState, subscribe, AuditFinding } from '@/lib/audit-store'
+import { Logo } from '@/components/logo'
+
 
 const RING_RADIUS = 52
 const RING_CIRCUMFERENCE = 2 * Math.PI * RING_RADIUS
@@ -109,7 +111,7 @@ export default function ResultsPage() {
   return (
     <main className="report-page">
       <header className="site-header shell">
-        <Link className="wordmark" href="/">ClaimClear</Link>
+        <Logo />
         <div className="header-actions">
           <ThemeToggle />
           <button className="button button-small" onClick={handleDownload} disabled={isDownloading}>
