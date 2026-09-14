@@ -6,9 +6,10 @@ import { ThemeToggle } from '@/components/theme-toggle'
 import { SiteFooter } from '@/components/site-footer'
 import { useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { startAudit } from '@/lib/audit-store'
 
 type UploadKind = 'clinical' | 'claim'
-type SelectedFile = { name: string; size: number }
+type SelectedFile = { file: File; name: string; size: number }
 
 function UploadBox({ kind, label, file, error, onFile, onRemove }: { kind: UploadKind; label: string; file: SelectedFile | null; error: string; onFile: (file: File) => void; onRemove: () => void }) {
   const inputRef = useRef<HTMLInputElement>(null)
@@ -22,8 +23,28 @@ function UploadBox({ kind, label, file, error, onFile, onRemove }: { kind: Uploa
 }
 
 export default function UploadPage() {
-  const router = useRouter(); const [files, setFiles] = useState<Record<UploadKind, SelectedFile | null>>({ clinical: null, claim: null }); const [errors, setErrors] = useState<Record<UploadKind, string>>({ clinical: '', claim: '' })
-  const selectFile = (kind: UploadKind, file: File) => { if (file.type !== 'application/pdf' && !file.name.toLowerCase().endsWith('.pdf')) { setErrors((current) => ({ ...current, [kind]: `That doesn't look like a PDF. Upload the ${kind === 'clinical' ? 'clinical record' : 'draft claim'} as a PDF.` })); return }; if (file.size > 10 * 1024 * 1024) { setErrors((current) => ({ ...current, [kind]: 'That file is larger than 10MB. Choose a smaller PDF.' })); return }; setErrors((current) => ({ ...current, [kind]: '' })); setFiles((current) => ({ ...current, [kind]: { name: file.name, size: file.size } })) }
+  const router = useRouter()
+  const [files, setFiles] = useState<Record<UploadKind, SelectedFile | null>>({ clinical: null, claim: null })
+  const [errors, setErrors] = useState<Record<UploadKind, string>>({ clinical: '', claim: '' })
+  const [submitError, setSubmitError] = useState('')
+
+  const selectFile = (kind: UploadKind, file: File) => {
+    if (file.type !== 'application/pdf' && !file.name.toLowerCase().endsWith('.pdf')) { setErrors((current) => ({ ...current, [kind]: `That doesn't look like a PDF. Upload the ${kind === 'clinical' ? 'clinical record' : 'draft claim'} as a PDF.` })); return }
+    if (file.size > 10 * 1024 * 1024) { setErrors((current) => ({ ...current, [kind]: 'That file is larger than 10MB. Choose a smaller PDF.' })); return }
+    setErrors((current) => ({ ...current, [kind]: '' }))
+    setFiles((current) => ({ ...current, [kind]: { file, name: file.name, size: file.size } }))
+  }
+
   const ready = Boolean(files.clinical && files.claim)
-  return <main><header className="site-header shell"><Link className="wordmark" href="/">ClaimClear</Link><div className="header-actions"><ThemeToggle /><span className="mono">Audit intake</span></div></header><section className="page-main shell"><div className="page-intro"><p className="mono-label">STEP 01 / DOCUMENTS</p><h1>Audit a claim</h1><p>Upload both documents to run your guided check.</p></div><div className="upload-grid"><UploadBox kind="clinical" label="Clinical record" file={files.clinical} error={errors.clinical} onFile={(file) => selectFile('clinical', file)} onRemove={() => setFiles((current) => ({ ...current, clinical: null }))} /><UploadBox kind="claim" label="Draft claim" file={files.claim} error={errors.claim} onFile={(file) => selectFile('claim', file)} onRemove={() => setFiles((current) => ({ ...current, claim: null }))} /></div><div className="upload-note"><LockKeyhole size={16} aria-hidden="true" /><span>Encrypted in transit · PDFs are used only to create this report</span></div><div className="actions"><button className="button" disabled={!ready} onClick={() => router.push('/processing')}>Run Audit <ArrowRight size={17} aria-hidden="true" /></button></div></section><SiteFooter /></main>
+
+  const runAudit = () => {
+    if (!files.clinical || !files.claim) return
+    setSubmitError('')
+    // Fire the request; DON'T await it here. The processing page
+    // subscribes to the same store and reacts when it finishes.
+    startAudit(files.clinical.file, files.claim.file)
+    router.push('/processing')
+  }
+
+  return <main><header className="site-header shell"><Link className="wordmark" href="/">ClaimClear</Link><div className="header-actions"><ThemeToggle /><span className="mono">Audit intake</span></div></header><section className="page-main shell"><div className="page-intro"><p className="mono-label">STEP 01 / DOCUMENTS</p><h1>Audit a claim</h1><p>Upload both documents to run your guided check.</p></div><div className="upload-grid"><UploadBox kind="clinical" label="Clinical record" file={files.clinical} error={errors.clinical} onFile={(file) => selectFile('clinical', file)} onRemove={() => setFiles((current) => ({ ...current, clinical: null }))} /><UploadBox kind="claim" label="Draft claim" file={files.claim} error={errors.claim} onFile={(file) => selectFile('claim', file)} onRemove={() => setFiles((current) => ({ ...current, claim: null }))} /></div><div className="upload-note"><LockKeyhole size={16} aria-hidden="true" /><span>Encrypted in transit · PDFs are used only to create this report</span></div>{submitError && <p className="error-text" role="alert">{submitError}</p>}<div className="actions"><button className="button" disabled={!ready} onClick={runAudit}>Run Audit <ArrowRight size={17} aria-hidden="true" /></button></div></section><SiteFooter /></main>
 }

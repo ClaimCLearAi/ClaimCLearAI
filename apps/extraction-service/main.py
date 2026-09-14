@@ -42,6 +42,18 @@ def get_document_text(pdf_bytes: bytes) -> DocumentExtractionResult:
     return DocumentExtractionResult(text=ocr_text, method="ocr", char_count=len(ocr_text))
 
 
+def is_valid_clinical_doc(text: str) -> bool:
+    """Heuristic check to ensure the document contains clinical keywords."""
+    keywords = ["patient", "discharge", "diagnosis", "hospital", "admission"]
+    return any(word in text.lower() for word in keywords)
+
+
+def is_valid_claim_form(text: str) -> bool:
+    """Heuristic check to ensure the document contains insurance claim keywords."""
+    keywords = ["claim", "insurance", "policy", "billing", "charges"]
+    return any(word in text.lower() for word in keywords)
+
+
 @app.get("/health")
 def health():
     return {"status": "ok"}
@@ -69,12 +81,29 @@ async def extract_endpoint(
     clinical_doc: UploadFile = File(...),
     draft_claim: UploadFile = File(...),
 ):
-    """Full pipeline: PDF/OCR extraction -> Gemini structuring -> rules audit."""
+    """Full pipeline: PDF/OCR extraction -> Validation -> Gemini structuring -> rules audit."""
     clinical_bytes = await clinical_doc.read()
     claim_bytes = await draft_claim.read()
 
     clinical_result = get_document_text(clinical_bytes)
     claim_result = get_document_text(claim_bytes)
+
+    # ---------------- VALIDATION CHECK ----------------
+    reasons = []
+    if not is_valid_clinical_doc(clinical_result.text):
+        reasons.append("File 1 does not appear to be a valid clinical document.")
+    if not is_valid_claim_form(claim_result.text):
+        reasons.append("File 2 does not appear to be a valid insurance claim form.")
+
+    if reasons:
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "message": "Document validation failed.",
+                "reasons": reasons
+            }
+        )
+    # --------------------------------------------------
 
     try:
         structured = llm_extract.run(clinical_result.text, claim_result.text)

@@ -1,18 +1,25 @@
 export const runtime = 'nodejs'
 
 import puppeteer from 'puppeteer'
-import { NextResponse } from 'next/server'
-import { REPORT_HTML } from '@/lib/report-template'
+import { NextRequest, NextResponse } from 'next/server'
+import { generateReportHtml, ReportData } from '@/lib/report-template'
 
-export async function GET() {
+export async function POST(request: NextRequest) {
   let browser
   try {
+    const data = (await request.json()) as ReportData
+
+    if (!data || typeof data.readiness_score !== 'number' || !Array.isArray(data.findings)) {
+      return NextResponse.json({ error: 'Missing or malformed audit data.' }, { status: 400 })
+    }
+
+    const html = generateReportHtml(data)
+
     browser = await puppeteer.launch({
       args: ['--no-sandbox', '--disable-setuid-sandbox'],
     })
     const page = await browser.newPage()
-
-    await page.setContent(REPORT_HTML, { waitUntil: 'load' })
+    await page.setContent(html, { waitUntil: 'load' })
 
     const pdfBuffer = await page.pdf({
       format: 'A4',
