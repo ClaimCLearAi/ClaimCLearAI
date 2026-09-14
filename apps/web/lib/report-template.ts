@@ -9,14 +9,25 @@ export type ReportFinding = {
   suggested_fix: string
 }
 
+export type PatientDetails = {
+  name?: string
+  member_id?: string
+  dob?: string
+  date_of_service?: string
+  principal_diagnosis?: string
+  discharge_status?: string
+}
+
 export type ReportData = {
   readiness_score: number
   status: string
   total_violations: number
+  patient_details?: PatientDetails
   findings: ReportFinding[]
 }
 
 function escapeHtml(value: string): string {
+  if (!value) return 'N/A'
   return value
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
@@ -36,7 +47,7 @@ function statusLabel(status: string) {
 }
 
 export function generateReportHtml(data: ReportData): string {
-  const circumference = 2 * Math.PI * 30 // r=30, matches the SVG below
+  const circumference = 2 * Math.PI * 30 
   const dashOffset = circumference - (data.readiness_score / 100) * circumference
   const today = new Date().toISOString().slice(0, 10)
 
@@ -58,6 +69,19 @@ export function generateReportHtml(data: ReportData): string {
     ? findingsHtml
     : `<p style="color:#475569;font-size:11px;">No issues found — this claim looks ready to submit.</p>`
 
+  const patientHtml = data.patient_details ? `
+    <div class="patient-section">
+      <p class="section-title">Patient & Encounter Details</p>
+      <div class="patient-grid">
+        <div class="p-field"><span>Patient Name</span><strong>${escapeHtml(data.patient_details.name || '')}</strong></div>
+        <div class="p-field"><span>Member ID</span><strong>${escapeHtml(data.patient_details.member_id || '')}</strong></div>
+        <div class="p-field"><span>Date of Service</span><strong>${escapeHtml(data.patient_details.date_of_service || '')}</strong></div>
+        <div class="p-field" style="grid-column: span 2;"><span>Principal Diagnosis</span><strong>${escapeHtml(data.patient_details.principal_diagnosis || '')}</strong></div>
+        <div class="p-field"><span>Discharge Status</span><strong>${escapeHtml(data.patient_details.discharge_status || '')}</strong></div>
+      </div>
+    </div>
+  ` : ''
+
   return `
 <!DOCTYPE html>
 <html lang="en">
@@ -65,34 +89,11 @@ export function generateReportHtml(data: ReportData): string {
   <meta charset="UTF-8" />
   <title>ClaimClear Audit Report</title>
   <style>
-    @page {
-      size: A4;
-      margin: 0;
-    }
-    * {
-      box-sizing: border-box;
-      margin: 0;
-      padding: 0;
-      -webkit-print-color-adjust: exact;
-      print-color-adjust: exact;
-    }
-    body {
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-      background-color: #ffffff;
-      color: #1e293b;
-      padding: 40px;
-      font-size: 12px;
-      line-height: 1.5;
-    }
+    @page { size: A4; margin: 0; }
+    * { box-sizing: border-box; margin: 0; padding: 0; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif; background-color: #ffffff; color: #1e293b; padding: 40px; font-size: 12px; line-height: 1.5; }
 
-    .header {
-      display: flex;
-      justify-content: space-between;
-      align-items: flex-start;
-      border-bottom: 2px solid #0f172a;
-      padding-bottom: 18px;
-      margin-bottom: 24px;
-    }
+    .header { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 2px solid #0f172a; padding-bottom: 18px; margin-bottom: 24px; }
     .brand h1 { font-size: 22px; font-weight: 800; color: #0f172a; letter-spacing: -0.02em; }
     .brand p { font-size: 11px; color: #64748b; margin-top: 2px; font-weight: 500; }
     .report-meta { text-align: right; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; font-size: 11px; color: #475569; }
@@ -100,25 +101,18 @@ export function generateReportHtml(data: ReportData): string {
 
     .section-title { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: #64748b; margin-bottom: 8px; }
 
-    .readiness-banner {
-      display: flex;
-      align-items: center;
-      gap: 22px;
-      border: 1px solid #bbf7d0;
-      border-left: 5px solid #eab308;
-      background: #fefce8;
-      padding: 16px 20px;
-      border-radius: 6px;
-      margin-bottom: 24px;
-    }
+    .patient-section { margin-bottom: 24px; }
+    .patient-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 12px 16px; }
+    .p-field { display: flex; flex-direction: column; }
+    .p-field span { font-size: 9px; text-transform: uppercase; color: #64748b; font-weight: 600; margin-bottom: 2px; }
+    .p-field strong { font-size: 12px; color: #0f172a; }
+
+    .readiness-banner { display: flex; align-items: center; gap: 22px; border: 1px solid #bbf7d0; border-left: 5px solid #eab308; background: #fefce8; padding: 16px 20px; border-radius: 6px; margin-bottom: 24px; }
     .score-circle { position: relative; width: 70px; height: 70px; flex-shrink: 0; }
     .score-circle svg { transform: rotate(-90deg); width: 70px; height: 70px; }
     .score-circle-track { fill: none; stroke: #fef08a; stroke-width: 6; }
     .score-circle-fill { fill: none; stroke: #ca8a04; stroke-width: 6; stroke-linecap: round; }
-    .score-number {
-      position: absolute; inset: 0; display: flex; flex-direction: column;
-      align-items: center; justify-content: center; font-size: 20px; font-weight: 800; color: #854d0e; line-height: 1;
-    }
+    .score-number { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; font-size: 20px; font-weight: 800; color: #854d0e; line-height: 1; }
     .score-copy h2 { font-size: 15px; font-weight: 700; color: #854d0e; margin-bottom: 3px; }
     .score-copy p { color: #713f12; font-size: 11px; }
 
@@ -137,7 +131,6 @@ export function generateReportHtml(data: ReportData): string {
   </style>
 </head>
 <body>
-
   <header class="header">
     <div class="brand">
       <h1>ClaimClear</h1>
@@ -147,6 +140,8 @@ export function generateReportHtml(data: ReportData): string {
       <div>DATE: <strong>${today}</strong></div>
     </div>
   </header>
+
+  ${patientHtml}
 
   <div class="readiness-banner">
     <div class="score-circle">
@@ -171,7 +166,6 @@ export function generateReportHtml(data: ReportData): string {
     <span>ClaimClear Pre-Submission Audit System</span>
     <span>Private &amp; Confidential</span>
   </footer>
-
 </body>
 </html>
 `

@@ -1,18 +1,23 @@
 import json
 from datetime import datetime
 from typing import Any, Dict, List, Tuple, Optional
+import re
 
 # -------------------------------------------------------------------------
 # SECTION 1: HELPER FUNCTIONS (Data Cleaning & Parsing)
 # -------------------------------------------------------------------------
 
-def normalize_text(value: Any) -> str:
-    """Removes extra spaces, punctuation, and converts text to lowercase."""
+
+HONORIFICS = r"^(mr|mrs|ms|miss|dr|prof|master|shri|smt|kum)\.?\s+"
+
+def normalize_text(value: str | None) -> str:
     if not value:
         return ""
-    text = str(value).lower()
-    cleaned = "".join(char for char in text if char.isalnum() or char.isspace())
-    return " ".join(cleaned.split())
+    text = value.strip().lower()
+    text = re.sub(HONORIFICS, "", text)          # strip leading honorific
+    text = re.sub(r"\s+", " ", text)              # collapse whitespace
+    text = re.sub(r"[^\w\s]", "", text)            # strip punctuation (periods, commas)
+    return text.strip()
 
 
 def parse_iso_datetime(date_str: Optional[str], time_str: Optional[str] = "00:00") -> datetime:
